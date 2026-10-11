@@ -102,7 +102,7 @@ with st.sidebar:
     st.divider()
     page = st.radio(
         "WORKSPACE",
-        ["Dashboard", "Upload & Process", "Explain a Topic", "Document Library", "About Track A"],
+        ["Dashboard", "Upload & Process", "Explain a Topic", "Document Library"],
         key="navigation",
         label_visibility="visible",
     )
@@ -136,33 +136,15 @@ if page == "Dashboard":
     c3.metric("Source files indexed", unique_sources)
     c4.metric("Supported formats", "PDF · DOCX · PPTX")
 
-    left, right = st.columns([1.15, 0.85], gap="large")
-    with left:
-        st.subheader("Start here")
-        with st.container(border=True):
-            st.markdown("#### 📚 01 · Build your knowledge base")
-            st.write("Upload several academic files together. EduGen-AI extracts text, assigns a category, and keeps page/slide/section metadata.")
-            st.button("Upload study material →", type="primary", use_container_width=True, on_click=go_to, args=("Upload & Process",))
-        with st.container(border=True):
-            st.markdown("#### ✨ 02 · Explain a topic")
-            st.write("Ask a question such as *Explain CPU scheduling using my notes and textbook*. Review the explanation and open every cited excerpt.")
-            st.button("Open topic explainer →", use_container_width=True, on_click=go_to, args=("Explain a Topic",))
-    with right:
-        st.subheader("Track A progress")
-        items = [
-            ("Project structure", True, "Ready in project ZIP; GitHub push is a manual step"),
-            ("PDF / DOCX / PPTX pipeline", True, "Extract + clean + chunk"),
-            ("Document categorization", True, "Notes, Textbook, Questions, Labs"),
-            ("Topic-based retrieval", True, "TF-IDF vectors + FAISS when installed"),
-            ("Multi-document interface", True, "Upload, query, sources"),
-            ("LLM explanation", bool(get_api_key()), "Gemini key configured" if get_api_key() else "Optional API key not configured"),
-            ("GitHub repository + push", False, "Follow DEPLOYMENT_GUIDE.md"),
-            ("Cloud deployment", False, "Do after local test"),
-            ("2-minute demo recording", False, "Use DEMO_SCRIPT.md"),
-        ]
-        for label, done, sub in items:
-            icon = "✅" if done else "⬜"
-            st.markdown(f"{icon} **{label}**  \n<span class='small-muted'>{sub}</span>", unsafe_allow_html=True)
+    st.subheader("Start here")
+    with st.container(border=True):
+        st.markdown("#### 📚 01 · Build your knowledge base")
+        st.write("Upload several academic files together. EduGen-AI extracts text, assigns a category, and keeps page/slide/section metadata.")
+        st.button("Upload study material →", type="primary", use_container_width=True, on_click=go_to, args=("Upload & Process",))
+    with st.container(border=True):
+        st.markdown("#### ✨ 02 · Explain a topic")
+        st.write("Ask a question such as *Explain CPU scheduling using my notes and textbook*. Review the explanation and open every cited excerpt.")
+        st.button("Open topic explainer →", use_container_width=True, on_click=go_to, args=("Explain a Topic",))
 
     if not docs:
         st.info("Tip: start by uploading at least two sources on the same topic (for example, Operating Systems notes + a question bank). This makes the multi-source demo much stronger.")
@@ -340,25 +322,6 @@ elif page == "Document Library":
             st.markdown("#### Sources represented in index")
             source_counts = Counter(c.get("source", "Unknown") for c in st.session_state.chunks)
             st.dataframe([{"Source": name, "Chunks": count} for name, count in source_counts.items()], hide_index=True, use_container_width=True)
-
-elif page == "About Track A":
-    st.subheader("Week 1–2 · Foundation & Quick Win")
-    st.write("This app implements the Track A foundation for a multi-document academic assistant. It extracts and categorizes academic files, indexes text chunks, retrieves evidence for a topic, and presents a source-grounded explanation.")
-    st.markdown("#### Checklist coverage")
-    checklist = [
-        ("Create GitHub repo with academic assistant project structure", "Project folders and README are included; repository creation is a manual GitHub step."),
-        ("Set up Python, LangChain, Streamlit, PyPDF2, FAISS", "Listed in requirements.txt; FAISS retrieval has a cosine fallback for local troubleshooting."),
-        ("Multi-format PDF, DOCX, PPTX processing", "Implemented. Text-only PDFs work best; scanned PDFs need OCR."),
-        ("Categorize notes, textbook, questions, labs", "Filename and text-based heuristic categorizer."),
-        ("Topic-based retrieval", "TF-IDF vectorization with FAISS similarity search; lightweight for a student laptop."),
-        ("Streamlit multi-document upload and topic queries", "Implemented with category filtering and source references."),
-        ("Deploy on Streamlit Cloud", "Follow DEPLOYMENT_GUIDE.md after local tests."),
-        ("Record 2-minute demo", "Follow DEMO_SCRIPT.md."),
-    ]
-    for name, detail in checklist:
-        with st.expander(name):
-            st.write(detail)
-    st.warning("Important: without GEMINI_API_KEY, the app gives an extractive explanation from matched passages. Configure a Gemini API key in Streamlit Secrets for generated step-by-step explanations. Do not commit the key to GitHub.")
 
 st.divider()
 st.markdown("<div class='small-muted'>EduGen AI · Track A · Academic sources first, answers with citations.</div>", unsafe_allow_html=True)
