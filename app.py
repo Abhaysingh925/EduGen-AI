@@ -9,6 +9,7 @@ import streamlit as st
 from document_pipeline import process_document
 from retrieval import search_chunks, retrieval_engine_name
 from llm import explain_topic
+from question_bank import generate_question_bank
 
 st.set_page_config(
     page_title="EduGen AI | Academic Assistant",
@@ -102,19 +103,11 @@ with st.sidebar:
     st.divider()
     page = st.radio(
         "WORKSPACE",
-        ["Dashboard", "Upload & Process", "Explain a Topic", "Document Library"],
-        key="navigation",
+["Dashboard", "Upload & Process", "Explain a Topic", "Question Bank", "Document Library"],        key="navigation",
         label_visibility="visible",
     )
     st.divider()
-    st.markdown("**System status**")
-    st.caption(f"Retrieval: {retrieval_engine_name()}")
-    if get_api_key():
-        st.success("Gemini key detected")
-    else:
-        st.info("Source-based mode · Add Gemini key for generated explanations")
-    st.markdown("<div class='tagline'>Week 1–2 · Foundation & Quick Win</div>", unsafe_allow_html=True)
-
+ 
 st.markdown(
     """
     <div class="hero">
@@ -306,7 +299,127 @@ elif page == "Explain a Topic":
             elif not st.session_state.last_results:
                 st.warning("No matching passages found. Try a shorter topic, switch category to All, or upload more relevant material.")
 
+elif page == "Question Bank":
+    st.subheader("📝 AI Question Bank Generator")
+    st.write("Generate questions from your uploaded study materials.")
+
+    if not st.session_state.chunks:
+        st.warning("Pehle Upload & Process section mein study material upload aur process karo.")
+        st.button(
+            "Go to Upload & Process",
+            type="primary",
+            on_click=go_to,
+            args=("Upload & Process",),
+        )
+    else:
+        with st.form("question_bank_form"):
+            topic = st.text_input(
+                "Topic",
+                placeholder="Example: CPU Scheduling Algorithms",
+            )
+            category = st.selectbox(
+                "Source category",
+                CATEGORIES,
+                key="qb_category",
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                mcq_count = st.number_input(
+                    "Number of MCQs", min_value=0, max_value=20, value=5
+                )
+                short_count = st.number_input(
+                    "Short questions", min_value=0, max_value=10, value=3
+                )
+            with col2:
+                long_count = st.number_input(
+                    "Long questions", min_value=0, max_value=5, value=2
+                )
+                difficulty = st.selectbox(
+                    "Difficulty",
+                    ["Easy", "Medium", "Hard", "Mixed"],
+                    index=3,
+                )
+
+            generate = st.form_submit_button(
+                "Generate Question Bank",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if generate:
+            if not topic.strip():
+                st.warning("Pehle topic enter karo.")
+            elif mcq_count + short_count + long_count == 0:
+                st.warning("Kam se kam ek question select karo.")
+            else:
+                with st.spinner("Study material se questions generate ho rahe hain..."):
+                    try:
+                        results = search_chunks(
+                            st.session_state.chunks,
+                            topic,
+                            top_k=10,
+                            category=category,
+                        )
+                        if not results:
+                            st.warning(
+                                "Is topic ke matching passages nahi mile. "
+                                "Topic ya source category change karke try karo."
+                            )
+                        else:
+                            bank = generate_question_bank(
+                                topic=topic,
+                                results=results,
+                                mcq_count=int(mcq_count),
+                                short_count=int(short_count),
+                                long_count=int(long_count),
+                                difficulty=difficulty,
+                                api_key=get_api_key(),
+                                model=get_gemini_model() or None,
+                            )
+                            st.session_state["generated_question_bank"] = bank
+                            st.session_state["question_bank_sources"] = results
+                    except Exception as exc:
+                        st.error(f"Question generation failed: {exc}")
+
+        bank = st.session_state.get("generated_question_bank")
+        if bank:
+            st.markdown(f"### Questions: {bank.get('topic', '')}")
+            st.caption(f"Difficulty: {bank.get('difficulty', difficulty if 'difficulty' in locals() else 'Mixed')}")
+
+            st.markdown("#### MCQs")
+            for i, q in enumerate(bank.get("mcqs", []), 1):
+                with st.expander(f"MCQ {i}: {q.get('question', 'Question')}"):
+                    options = q.get("options", {})
+                    for label in ["A", "B", "C", "D"]:
+                        if label in options:
+                            st.write(f"**{label}.** {options[label]}")
+                    st.markdown(f"**Correct answer:** {q.get('answer', 'Not provided')}")
+                    st.write(q.get("explanation", ""))
+                    st.caption(f"Source: {q.get('source', 'Not specified')}")
+
+            st.markdown("#### Short-answer questions")
+            for i, q in enumerate(bank.get("short_questions", []), 1):
+                with st.expander(f"Short question {i}: {q.get('question', 'Question')}"):
+                    st.write(q.get("answer", "Answer not provided"))
+                    st.caption(f"Source: {q.get('source', 'Not specified')}")
+
+            st.markdown("#### Long-answer questions")
+            for i, q in enumerate(bank.get("long_questions", []), 1):
+                with st.expander(f"Long question {i}: {q.get('question', 'Question')}"):
+                    st.write(q.get("answer", "Answer not provided"))
+                    st.caption(f"Source: {q.get('source', 'Not specified')}")
+
+            st.download_button(
+                "Download Question Bank (JSON)",
+                data=__import__("json").dumps(
+                    bank, ensure_ascii=False, indent=2
+                ),
+                file_name="edugen_question_bank.json",
+                mime="application/json",
+            )
+
 elif page == "Document Library":
+
     st.subheader("🗂️ Document library")
     if not st.session_state.processed_docs:
         st.info("No documents processed in this session yet.")
