@@ -43,15 +43,34 @@ def search_chunks(
     top_k: int = 6,
     category: str = "All",
     diversify_sources: bool = True,
+    subject: str = "All",
+    chapter: str = "All",
 ) -> list[dict[str, Any]]:
     """Return the most relevant chunks, preserving source/category/page metadata."""
     query = (query or "").strip()
     if not query or not chunks:
         return []
 
+
     candidates = [c for c in chunks if str(c.get("text", "")).strip()]
+
     if category and category != "All":
-        candidates = [c for c in candidates if c.get("category", "Other") == category]
+        candidates = [
+            c for c in candidates
+            if c.get("category", "Other") == category
+        ]
+
+    if subject and subject != "All":
+        candidates = [
+            c for c in candidates
+            if c.get("subject", "Unassigned") == subject
+        ]
+
+    if chapter and chapter != "All":
+        candidates = [
+            c for c in candidates
+            if c.get("chapter", "Unassigned") == chapter
+        ]
     if not candidates:
         return []
 

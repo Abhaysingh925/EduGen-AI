@@ -10,6 +10,8 @@ from document_pipeline import process_document
 from retrieval import search_chunks, retrieval_engine_name
 from llm import explain_topic
 from question_bank import generate_question_bank
+from content_synthesis import synthesize_content
+from assessment import render_quiz
 
 st.set_page_config(
     page_title="EduGen AI | Academic Assistant",
@@ -103,8 +105,7 @@ with st.sidebar:
     st.divider()
     page = st.radio(
         "WORKSPACE",
-["Dashboard", "Upload & Process", "Explain a Topic", "Question Bank", "Document Library"],        key="navigation",
-        label_visibility="visible",
+["Dashboard", "Upload & Process", "Explain a Topic", "Question Bank", "Content Synthesis", "Document Library"],        label_visibility="visible",
     )
     st.divider()
  
@@ -175,7 +176,21 @@ elif page == "Upload & Process":
         chunk_size = st.select_slider("Chunk size", options=[500, 700, 900, 1200, 1500], value=900)
     with b:
         overlap = st.select_slider("Overlap", options=[0, 50, 100, 120, 150, 200], value=120)
+    subject_col, chapter_col = st.columns(2)
 
+    with subject_col:
+        subject_name = st.text_input(
+            "Subject",
+            placeholder="e.g., Software Engineering",
+            key="upload_subject",
+        )
+
+    with chapter_col:
+        chapter_name = st.text_input(
+            "Chapter / Unit",
+            placeholder="e.g., Software Requirements",
+            key="upload_chapter",
+        )
     if st.button("Process & index files", type="primary", disabled=not uploaded_files):
         progress = st.progress(0)
         status = st.empty()
@@ -194,13 +209,23 @@ elif page == "Upload & Process":
                 new_chunks = process_document(uploaded, chunk_size=int(chunk_size), overlap=int(overlap))
                 if not new_chunks:
                     errors.append(f"{uploaded.name}: no extractable text found. If this is a scanned PDF, use a text-based PDF or OCR first.")
+               
                 else:
+                    subject_value = subject_name.strip() or "Unassigned"
+                    chapter_value = chapter_name.strip() or "Unassigned"
+
+                    for chunk in new_chunks:
+                        chunk["subject"] = subject_value
+                        chunk["chapter"] = chapter_value
                     st.session_state.chunks.extend(new_chunks)
+
                     category = new_chunks[0].get("category", "Other")
                     st.session_state.processed_docs.append({
                         "name": uploaded.name,
                         "format": uploaded.name.rsplit(".", 1)[-1].upper(),
                         "category": category,
+                        "subject": subject_value,
+                        "chapter": chapter_value,
                         "chunks": len(new_chunks),
                         "locations": len({c.get("page") for c in new_chunks}),
                         "size_kb": round(len(payload) / 1024, 1),
@@ -246,6 +271,27 @@ elif page == "Explain a Topic":
             col1, col2, col3 = st.columns(3)
             with col1:
                 category = st.selectbox("Source category", CATEGORIES, index=0)
+            subject_options = sorted({
+                c.get("subject", "Unassigned")
+                for c in st.session_state.chunks
+            })
+            subject = st.selectbox(
+                "Subject",
+                ["All"] + subject_options,
+                key="explain_subject",
+            )
+
+            chapter_options = sorted({
+                c.get("chapter", "Unassigned")
+                for c in st.session_state.chunks
+                if subject == "All"
+                or c.get("subject", "Unassigned") == subject
+            })
+            chapter = st.selectbox(
+                "Chapter / Unit",
+                ["All"] + chapter_options,
+                key="explain_chapter",
+            )
             with col2:
                 language = st.selectbox("Answer language", ["English", "Hindi", "Hinglish"])
             with col3:
@@ -258,7 +304,14 @@ elif page == "Explain a Topic":
                 st.warning("Type a topic or question first.")
             else:
                 with st.spinner("Searching your sources and preparing an explanation..."):
-                    results = search_chunks(st.session_state.chunks, question, top_k=top_k, category=category)
+                    results = search_chunks(
+                        st.session_state.chunks,
+                        question,
+                        top_k=top_k,
+                        category=category,
+                        subject=subject,
+                        chapter=chapter,
+                    )
                     if results:
                         generation = explain_topic(question, results, api_key=get_api_key(), language=language, level=level, model=get_gemini_model() or None)
                         st.session_state.last_question = question
@@ -322,6 +375,27 @@ elif page == "Question Bank":
                 CATEGORIES,
                 key="qb_category",
             )
+            subject_options = sorted({
+                c.get("subject", "Unassigned")
+                for c in st.session_state.chunks
+            })
+            subject = st.selectbox(
+                "Subject",
+                ["All"] + subject_options,
+                key="qb_subject",
+            )
+
+            chapter_options = sorted({
+                c.get("chapter", "Unassigned")
+                for c in st.session_state.chunks
+                if subject == "All"
+                or c.get("subject", "Unassigned") == subject
+            })
+            chapter = st.selectbox(
+                "Chapter / Unit",
+                ["All"] + chapter_options,
+                key="qb_chapter",
+            )
             col1, col2 = st.columns(2)
             with col1:
                 mcq_count = st.number_input(
@@ -359,6 +433,8 @@ elif page == "Question Bank":
                             topic,
                             top_k=10,
                             category=category,
+                            subject=subject,
+                            chapter=chapter,
                         )
                         if not results:
                             st.warning(
@@ -417,24 +493,245 @@ elif page == "Question Bank":
                 file_name="edugen_question_bank.json",
                 mime="application/json",
             )
+            st.divider()
+            render_quiz(st, bank)
+
+elif page == "Content Synthesis":
+    st.subheader("📚 AI Content Synthesis")
+    st.write(
+        "Combine information from your uploaded study materials "
+        "into organized notes, comparisons, or revision summaries."
+    )
+
+    if not st.session_state.chunks:
+        st.warning(
+            "Pehle Upload & Process mein study material upload aur process karo."
+        )
+        st.button(
+            "Go to Upload & Process",
+            type="primary",
+            on_click=go_to,
+            args=("Upload & Process",),
+        )
+    else:
+        with st.form("content_synthesis_form"):
+            topic = st.text_input(
+                "Topic",
+                placeholder="Example: Software Requirements Engineering",
+            )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                synthesis_category = st.selectbox(
+                    "Source category",
+                    CATEGORIES,
+                    key="synthesis_category",
+                )
+                synthesis_subject = st.selectbox(
+                    "Subject",
+                    ["All"] + sorted({
+                        c.get("subject", "Unassigned")
+                        for c in st.session_state.chunks
+                    }),
+                    key="synthesis_subject",
+                )
+
+                synthesis_chapter = st.selectbox(
+                    "Chapter / Unit",
+                    ["All"] + sorted({
+                        c.get("chapter", "Unassigned")
+                        for c in st.session_state.chunks
+                        if synthesis_subject == "All"
+                        or c.get("subject", "Unassigned") == synthesis_subject
+                    }),
+                    key="synthesis_chapter",
+                )
+
+                synthesis_language = st.selectbox(
+                    "Output language",
+                    ["English", "Hindi", "Hinglish"],
+                    key="synthesis_language",
+                )
+
+            with col2:
+                format_type = st.selectbox(
+                    "Output format",
+                    ["Study Notes", "Comparison", "Quick Revision"],
+                    key="synthesis_format",
+                )
+
+                synthesis_top_k = st.slider(
+                    "Evidence passages to combine",
+                    min_value=3,
+                    max_value=10,
+                    value=6,
+                    key="synthesis_top_k",
+                )
+
+            synthesize_clicked = st.form_submit_button(
+                "Generate Study Content",
+                type="primary",
+                use_container_width=True,
+            )
+
+        if synthesize_clicked:
+            if not topic.strip():
+                st.warning("Pehle topic enter karo.")
+            elif not get_api_key():
+                st.error(
+                    "Gemini API key configured nahi hai. "
+                    "Local .env ya Streamlit Cloud Secrets check karo."
+                )
+            else:
+                with st.spinner(
+                    "Uploaded documents ko compare karke content bana rahe hain..."
+                ):
+                    try:
+                        results = search_chunks(
+                            st.session_state.chunks,
+                            topic,
+                            top_k=synthesis_top_k,
+                            category=synthesis_category,
+                        )
+
+                        if not results:
+                            st.session_state["last_synthesis"] = None
+                            st.warning(
+                                "Matching passages nahi mile. "
+                                "Topic ya source category change karke dekho."
+                            )
+                        else:
+                            synthesis = synthesize_content(
+                                topic=topic,
+                                results=results,
+                                api_key=get_api_key(),
+                                language=synthesis_language,
+                                format_type=format_type,
+                                model=get_gemini_model() or None,
+                            )
+
+                            st.session_state["last_synthesis"] = synthesis
+                            st.session_state["last_synthesis_results"] = results
+
+                    except Exception as exc:
+                        st.error(f"Content synthesis failed: {exc}")
+
+        synthesis = st.session_state.get("last_synthesis")
+
+        if synthesis:
+            st.markdown(f"### {synthesis['topic']}")
+            st.caption(
+                f"Format: {synthesis['format']} | "
+                f"Language: {synthesis['language']}"
+            )
+
+            with st.container(border=True):
+                st.markdown(synthesis["content"])
+
+            sources = synthesis.get("sources", [])
+            st.markdown("#### Sources used")
+            for source in sources:
+                st.write(f"- {source}")
+
+            st.download_button(
+                "Download study content (.md)",
+                data=(
+                    f"# {synthesis['topic']}\n\n"
+                    f"Format: {synthesis['format']}\n\n"
+                    f"{synthesis['content']}\n"
+                ),
+                file_name="edugen_synthesized_notes.md",
+                mime="text/markdown",
+            )
 
 elif page == "Document Library":
-
     st.subheader("🗂️ Document library")
+
     if not st.session_state.processed_docs:
         st.info("No documents processed in this session yet.")
-        st.button("Upload documents →", type="primary", on_click=go_to, args=("Upload & Process",))
+        st.button(
+            "Upload documents →",
+            type="primary",
+            on_click=go_to,
+            args=("Upload & Process",),
+        )
     else:
-        st.dataframe(st.session_state.processed_docs, use_container_width=True, hide_index=True)
-        categories = Counter(d["category"] for d in st.session_state.processed_docs)
-        col1, col2 = st.columns([1, 1])
+        docs = st.session_state.processed_docs
+
+        subjects = sorted({
+            d.get("subject", "Unassigned") or "Unassigned"
+            for d in docs
+        })
+        selected_subject = st.selectbox(
+            "Filter by Subject",
+            ["All"] + subjects,
+        )
+
+        filtered_docs = docs
+        if selected_subject != "All":
+            filtered_docs = [
+                d for d in docs
+                if (d.get("subject", "Unassigned") or "Unassigned")
+                == selected_subject
+            ]
+
+        chapters = sorted({
+            d.get("chapter", "Unassigned") or "Unassigned"
+            for d in filtered_docs
+        })
+        selected_chapter = st.selectbox(
+            "Filter by Chapter / Unit",
+            ["All"] + chapters,
+        )
+
+        if selected_chapter != "All":
+            filtered_docs = [
+                d for d in filtered_docs
+                if (d.get("chapter", "Unassigned") or "Unassigned")
+                == selected_chapter
+            ]
+
+        st.caption(f"Showing {len(filtered_docs)} of {len(docs)} documents")
+        st.dataframe(
+            filtered_docs,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        categories = Counter(
+            d.get("category", "Other") for d in filtered_docs
+        )
+
+        col1, col2 = st.columns(2)
+
         with col1:
             st.markdown("#### Category breakdown")
-            st.bar_chart({"Category": list(categories.keys()), "Files": list(categories.values())}, x="Category", y="Files")
+            if categories:
+                st.bar_chart({
+                    "Category": list(categories.keys()),
+                    "Files": list(categories.values()),
+                }, x="Category", y="Files")
+            else:
+                st.info("No documents match these filters.")
+
         with col2:
             st.markdown("#### Sources represented in index")
-            source_counts = Counter(c.get("source", "Unknown") for c in st.session_state.chunks)
-            st.dataframe([{"Source": name, "Chunks": count} for name, count in source_counts.items()], hide_index=True, use_container_width=True)
+            selected_names = {d["name"] for d in filtered_docs}
+            source_counts = Counter(
+                c.get("source", "Unknown")
+                for c in st.session_state.chunks
+                if c.get("source") in selected_names
+            )
+            st.dataframe(
+                [
+                    {"Source": name, "Chunks": count}
+                    for name, count in source_counts.items()
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
 
 st.divider()
 st.markdown("<div class='small-muted'>EduGen AI · Track A · Academic sources first, answers with citations.</div>", unsafe_allow_html=True)
+

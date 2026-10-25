@@ -93,3 +93,26 @@ The exact model name is configurable in `GEMINI_MODEL`. Confirm currently availa
 6. Test one additional user PDF or slide deck; do not rely only on the bundled samples.
 
 See `DEPLOYMENT_GUIDE.md` for GitHub and Streamlit Cloud steps and `DEMO_SCRIPT.md` for a timed presentation outline.
+## Additional Features
+
+- **Question Bank:** Generate multiple-choice, short-answer, and long-answer questions from uploaded study materials.
+- **Interactive Quiz:** Attempt generated MCQs and review your score.
+- **Content Synthesis:** Generate study notes, topic comparisons, and quick revision material using retrieved document passages.
+- **Subject and Chapter Organization:** Add subject and chapter/unit metadata while uploading documents.
+- **Document Library Filters:** Filter processed documents by subject and chapter, and review their categories and indexed source chunks.
+- **Source-Grounded Responses:** Use retrieved passages to keep generated study content connected to uploaded materials.
+
+## Current Project Status
+
+EduGen-AI Track A includes document ingestion, topic-based retrieval, AI-assisted explanations, question generation, interactive quizzes, content synthesis, and document organization.
+
+Some features and outputs may need further validation before the project is considered complete.
+
+## Live Demo
+
+Try the deployed application: https://edugen-ai-taeskkfdyuyxkomnemmy2u.streamlit.app/
+
+## Developer
+
+**Presented by:** Abhay Singh
+
