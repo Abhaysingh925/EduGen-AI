@@ -10,7 +10,7 @@ from processors.pptx_processor import process_pptx
 from utils.text_cleaner import clean_text, remove_repeated_lines
 from utils.categorizer import categorize
 from utils.chunker import chunk_document
-
+from utils.code_analyzer import analyze_text
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
 
@@ -54,4 +54,14 @@ def process_document(file: Any, chunk_size: int = 900, overlap: int = 120) -> li
     for chunk in chunks:
         chunk["file_type"] = ext.lstrip(".")
         chunk["location_type"] = location_type
+
+        analysis = analyze_text(chunk["text"])
+        chunk["contains_code"] = analysis["contains_code"]
+        chunk["code_blocks"] = analysis["code_blocks"]
+        chunk["programming_languages"] = list({
+            block["detected_language"]
+            for block in analysis["code_blocks"]
+            if block["detected_language"] != "Unknown"
+        })
+
     return chunks

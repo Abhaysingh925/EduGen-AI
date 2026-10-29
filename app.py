@@ -219,6 +219,26 @@ elif page == "Upload & Process":
                         chunk["chapter"] = chapter_value
                     st.session_state.chunks.extend(new_chunks)
 
+                    # Week 5: Programming code detection summary
+                    code_chunks = [
+                        chunk for chunk in new_chunks
+                        if chunk.get("contains_code", False)
+                    ]
+
+                    detected_languages = sorted({
+                        language
+                        for chunk in code_chunks
+                        for language in chunk.get("programming_languages", [])
+                    })
+
+                    if code_chunks:
+                        st.info(
+                            f"Code detected in {len(code_chunks)} chunk(s). "
+                            f"Languages: {', '.join(detected_languages) or 'Unknown'}"
+                        )
+                    else:
+                        st.caption("No recognizable programming code detected in this file.")
+
                     category = new_chunks[0].get("category", "Other")
                     st.session_state.processed_docs.append({
                         "name": uploaded.name,
