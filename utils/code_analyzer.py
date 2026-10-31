@@ -116,3 +116,22 @@ def analyze_text(text: str) -> dict[str, Any]:
         "code_block_count": len(blocks),
         "code_blocks": blocks,
     }
+
+def get_highlight_language(language: str) -> str:
+    """Convert detected language names into Streamlit highlighting languages."""
+
+    language_map = {
+        "python": "python",
+        "py": "python",
+        "java": "java",
+        "c++": "cpp",
+        "cpp": "cpp",
+        "c": "c",
+        "javascript": "javascript",
+        "js": "javascript",
+    }
+
+    return language_map.get(
+        (language or "").strip().lower(),
+        "text"
+    )

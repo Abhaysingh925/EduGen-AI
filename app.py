@@ -1,10 +1,15 @@
 from __future__ import annotations
-
+from utils.code_analyzer import get_highlight_language
 import hashlib
 import os
 from pathlib import Path
 from collections import Counter
-
+from utils.algorithm_analyzer import (
+    ALGORITHM_DATABASE,
+    explain_algorithm,
+    dry_run_binary_search,
+    simulate_cpu_scheduling
+)
 import streamlit as st
 from document_pipeline import process_document
 from retrieval import search_chunks, retrieval_engine_name
@@ -32,7 +37,26 @@ st.markdown(
       .block-container { max-width: 1240px; padding-top: 1.25rem; padding-bottom: 2.5rem; }
       [data-testid="stSidebar"] { background: #10172a; }
       [data-testid="stSidebar"] * { color: #edf2ff; }
-      [data-testid="stSidebar"] [data-testid="stRadio"] label { color: #e5e7eb; }
+     /* Sidebar menu - larger and more readable */
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    color: #e5e7eb;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    padding: 12px 10px !important;
+    margin-bottom: 8px !important;
+}
+
+/* Sidebar width */
+[data-testid="stSidebar"] {
+    background: #10172a;
+    min-width: 290px;
+    max-width: 290px;
+}
+
+/* Sidebar title */
+[data-testid="stSidebar"] h1 {
+    font-size: 30px !important;
+}
       .hero { background: linear-gradient(120deg,#111827 0%,#253a78 55%,#5b43c7 100%); padding: 30px 34px; border-radius: 22px; color: white; margin-bottom: 24px; box-shadow: 0 16px 38px rgba(31,41,95,.18); }
       .hero .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 11px; font-weight: 700; color: #c7d2fe; margin-bottom: 8px; }
       .hero h1 { font-family: 'Space Grotesk', sans-serif; color: white; font-size: clamp(30px,4vw,45px); line-height: 1.08; margin: 0; }
@@ -105,7 +129,8 @@ with st.sidebar:
     st.divider()
     page = st.radio(
         "WORKSPACE",
-["Dashboard", "Upload & Process", "Explain a Topic", "Question Bank", "Content Synthesis", "Document Library"],        label_visibility="visible",
+["Dashboard", "Upload & Process", "Explain a Topic", "Question Bank", "Content Synthesis", "Document Library", "Algorithm Lab"],
+         label_visibility="visible",
     )
     st.divider()
  
@@ -238,7 +263,35 @@ elif page == "Upload & Process":
                         )
                     else:
                         st.caption("No recognizable programming code detected in this file.")
+                    # Week 6: Syntax-highlighted code display
+                    for chunk_number, chunk in enumerate(new_chunks, start=1):
+                        code_blocks = chunk.get("code_blocks", [])
 
+                        if not code_blocks:
+                            continue
+
+                        with st.expander(
+                            f"Code Examples - {uploaded.name} - Chunk {chunk_number}"
+                        ):
+                            for block_number, block in enumerate(code_blocks, start=1):
+                                detected = block.get("detected_language", "Unknown")
+                                declared = block.get("declared_language", "Not specified")
+
+                                language = (
+                                    detected if detected != "Unknown" else declared
+                                )
+
+                                highlight_language = get_highlight_language(language)
+
+                                st.caption(
+                                    f"Code Block {block_number} | Language: {language}"
+                                )
+
+                                st.code(
+                                    block.get("code", ""),
+                                    language=highlight_language,
+                                    line_numbers=True
+                                )
                     category = new_chunks[0].get("category", "Other")
                     st.session_state.processed_docs.append({
                         "name": uploaded.name,
@@ -752,6 +805,199 @@ elif page == "Document Library":
                 use_container_width=True,
             )
 
-st.divider()
-st.markdown("<div class='small-muted'>EduGen AI · Track A · Academic sources first, answers with citations.</div>", unsafe_allow_html=True)
+elif page == "Algorithm Lab":
 
+    st.title("🧠 Algorithm Lab")
+    st.write("Learn algorithms with step-by-step explanations and practical examples.")
+
+    algorithm_options = {
+        details["name"]: algorithm_id
+        for algorithm_id, details in ALGORITHM_DATABASE.items()
+    }
+
+    selected_name = st.selectbox(
+        "Choose an Algorithm",
+        list(algorithm_options.keys())
+    )
+
+    selected_id = algorithm_options[selected_name]
+    explanation = explain_algorithm(selected_id)
+
+    if explanation:
+        st.subheader(explanation["name"])
+        st.caption(f"Category: {explanation['category']}")
+
+        st.markdown("### Step-by-Step Explanation")
+
+        for index, step in enumerate(explanation["steps"], start=1):
+            st.write(f"**Step {index}:** {step}")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.metric("Time Complexity", explanation["time_complexity"])
+
+        with col2:
+            st.metric("Space Complexity", explanation["space_complexity"])
+
+    if selected_id == "BINARY_SEARCH":
+
+        st.divider()
+        st.subheader("🔍 Binary Search Dry Run")
+
+        array_input = st.text_input(
+            "Enter sorted numbers (comma-separated)",
+            value="10,20,30,40,50"
+        )
+
+        target_input = st.number_input(
+            "Enter target number",
+            value=40,
+            step=1
+        )
+
+        if st.button("Run Binary Search", type="primary"):
+
+            try:
+                numbers = [
+                    int(value.strip())
+                    for value in array_input.split(",")
+                    if value.strip()
+                ]
+
+                result = dry_run_binary_search(
+                    numbers,
+                    int(target_input)
+                )
+
+                st.info(result["message"])
+
+                if result["steps"]:
+                    st.markdown("### Execution Steps")
+
+                    for index, step in enumerate(result["steps"], start=1):
+                        st.write(
+                            f"**Step {index}:** "
+                            f"Left = {step['left']}, "
+                            f"Right = {step['right']}, "
+                            f"Middle = {step['middle']}, "
+                            f"Value = {step['middle_value']}"
+                        )
+
+                if result["found"]:
+                    st.success(
+                        f"Target found at index {result['index']}!"
+                    )
+                else:
+                    st.warning("Target was not found.")
+
+            except ValueError:
+                st.error("Please enter valid comma-separated integers.")
+
+    if selected_id in ["FCFS", "SJF", "SRTF", "ROUND_ROBIN"]:
+
+        st.divider()
+        st.subheader("⚙️ CPU Scheduling Simulator")
+
+        st.write("Enter process details to simulate CPU scheduling.")
+
+        process_count = st.number_input(
+            "Number of Processes",
+            min_value=1,
+            max_value=10,
+            value=3,
+            step=1,
+            key="cpu_process_count"
+        )
+
+        processes = []
+
+        for i in range(int(process_count)):
+            st.markdown(f"**Process P{i + 1}**")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                arrival = st.number_input(
+                    f"Arrival Time P{i + 1}",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    key=f"arrival_{i}"
+                )
+
+            with col2:
+                burst = st.number_input(
+                    f"Burst Time P{i + 1}",
+                    min_value=1,
+                    value=5,
+                    step=1,
+                    key=f"burst_{i}"
+                )
+
+            processes.append({
+                "pid": f"P{i + 1}",
+                "arrival": int(arrival),
+                "burst": int(burst)
+            })
+
+        quantum = None
+
+        if selected_id == "ROUND_ROBIN":
+            quantum = st.number_input(
+                "Time Quantum",
+                min_value=1,
+                value=2,
+                step=1,
+                key="rr_quantum"
+            )
+
+        if st.button("Run CPU Scheduling", type="primary"):
+
+            result = simulate_cpu_scheduling(
+                processes,
+                selected_id,
+                quantum=int(quantum) if quantum is not None else None
+            )
+
+            if "error" in result:
+                st.error(result["error"])
+
+            else:
+                st.success("Scheduling simulation completed!")
+
+                st.markdown("### Gantt Chart")
+
+                gantt_data = result["gantt_chart"]
+
+                gantt_text = "  →  ".join(
+                    f"{item['pid']} ({item['start']}-{item['end']})"
+                    for item in gantt_data
+                )
+
+                st.info(gantt_text)
+
+                st.markdown("### Process Results")
+
+                st.dataframe(
+                    result["process_results"],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                col1, col2, col3 = st.columns(3)
+
+                col1.metric(
+                    "Average Waiting Time",
+                    f"{result['average_waiting_time']:.2f}"
+                )
+
+                col2.metric(
+                    "Average Turnaround Time",
+                    f"{result['average_turnaround_time']:.2f}"
+                )
+
+                col3.metric(
+                    "Average Response Time",
+                    f"{result['average_response_time']:.2f}"
+                )
